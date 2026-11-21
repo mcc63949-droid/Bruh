@@ -1,0 +1,332 @@
+-- รองรับ PC Executor ทุกตัวและระบบ UI ภายใน Roblox
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ฟังก์ชันหา Parent ของ UI ที่รองรับ Executor บน PC ทุกชนิด
+local function GetSafeGuiParent()
+    if type(gethui) == "function" then
+        local ok, hui = pcall(gethui)
+        if ok and hui then
+            return hui
+        end
+    end
+    local okCore, _ = pcall(function()
+        return CoreGui:GetChildren()
+    end)
+    if okCore then
+        return CoreGui
+    end
+    return PlayerGui
+end
+
+local GuiParent = GetSafeGuiParent()
+
+-- สถานะการทำงานของฟังก์ชัน
+local States = {
+    AntiAFK = false,
+    PotatoMode = false,
+    AutoFish = false
+}
+
+-- ลบ UI เก่าหากมีการรันซ้ำ
+local existingGui = GuiParent:FindFirstChild("SolsRNG_PC_Hub")
+if existingGui then
+    existingGui:Destroy()
+end
+
+-- สร้าง ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SolsRNG_PC_Hub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = GuiParent
+
+-- ==========================================
+-- ปุ่มเปิด/ปิดเมนูสไตล์ UI ทางการของ Roblox (มุมซ้ายบน)
+-- ==========================================
+local ToggleMenuBtn = Instance.new("TextButton")
+ToggleMenuBtn.Name = "RobloxStyleToggle"
+ToggleMenuBtn.Size = UDim2.new(0, 128, 0, 34)
+ToggleMenuBtn.Position = UDim2.new(0, 12, 0, 10)
+ToggleMenuBtn.BackgroundColor3 = Color3.fromRGB(37, 40, 46) -- โทนสีใกล้เคียง Topbar UI ทางการของ Roblox
+ToggleMenuBtn.BorderSizePixel = 0
+ToggleMenuBtn.Text = "⚡ Sol's Hub"
+ToggleMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleMenuBtn.Font = Enum.Font.GothamBold
+ToggleMenuBtn.TextSize = 13
+ToggleMenuBtn.AutoButtonColor = false
+ToggleMenuBtn.Parent = ScreenGui
+
+local ToggleBtnCorner = Instance.new("UICorner")
+ToggleBtnCorner.CornerRadius = UDim.new(0, 8)
+ToggleBtnCorner.Parent = ToggleMenuBtn
+
+local ToggleBtnStroke = Instance.new("UIStroke")
+ToggleBtnStroke.Color = Color3.fromRGB(85, 90, 100)
+ToggleBtnStroke.Thickness = 1.2
+ToggleBtnStroke.Parent = ToggleMenuBtn
+
+-- ==========================================
+-- หน้าต่างเมนูหลัก + แอนิเมชันสวิตช์
+-- ==========================================
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 340, 0, 275)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -137)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.ClipsDescendants = true
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(60, 66, 82)
+MainStroke.Thickness = 1.5
+MainStroke.Parent = MainFrame
+
+-- แถบหัวข้อด้านบน
+local Topbar = Instance.new("Frame")
+Topbar.Size = UDim2.new(1, 0, 0, 42)
+Topbar.BackgroundColor3 = Color3.fromRGB(30, 33, 42)
+Topbar.BorderSizePixel = 0
+Topbar.Parent = MainFrame
+
+local TopCorner = Instance.new("UICorner")
+TopCorner.CornerRadius = UDim.new(0, 12)
+TopCorner.Parent = Topbar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -85, 1, 0)
+Title.Position = UDim2.new(0, 14, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Sol's RNG PC Hub [RightShift]"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 13
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Topbar
+
+-- ปุ่มย่อ/ขยาย (-)
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 28, 0, 28)
+MinBtn.Position = UDim2.new(1, -66, 0, 7)
+MinBtn.BackgroundColor3 = Color3.fromRGB(45, 50, 64)
+MinBtn.Text = "-"
+MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 16
+MinBtn.Parent = Topbar
+
+local MinCorner = Instance.new("UICorner")
+MinCorner.CornerRadius = UDim.new(0, 6)
+MinCorner.Parent = MinBtn
+
+-- ปุ่มปิดหน้าต่าง (X)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -34, 0, 7)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 55, 65)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 16
+CloseBtn.Parent = Topbar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+-- ระบบเปิด-ปิดเมนูจากปุ่มมุมจอและคีย์ลัด RightShift
+local function SetMenuVisible(state)
+    MainFrame.Visible = state
+    TweenService:Create(ToggleMenuBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+        BackgroundColor3 = state and Color3.fromRGB(46, 125, 90) or Color3.fromRGB(37, 40, 46)
+    }):Play()
+end
+
+ToggleMenuBtn.MouseButton1Click:Connect(function()
+    SetMenuVisible(not MainFrame.Visible)
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    SetMenuVisible(false)
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.RightShift then
+        SetMenuVisible(not MainFrame.Visible)
+    end
+end)
+
+local isMinimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    local targetSize = isMinimized and UDim2.new(0, 340, 0, 42) or UDim2.new(0, 340, 0, 275)
+    MinBtn.Text = isMinimized and "+" or "-"
+    TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Size = targetSize
+    }):Play()
+end)
+
+-- พื้นที่ใส่รายการฟังก์ชัน
+local Container = Instance.new("Frame")
+Container.Size = UDim2.new(1, -24, 1, -54)
+Container.Position = UDim2.new(0, 12, 0, 48)
+Container.BackgroundTransparency = 1
+Container.Parent = MainFrame
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Padding = UDim.new(0, 10)
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Parent = Container
+
+-- ฟังก์ชันสร้างสวิตช์พร้อมแอนิเมชัน
+local function CreateAnimatedToggle(titleText, descText, callback)
+    local Row = Instance.new("Frame")
+    Row.Size = UDim2.new(1, 0, 0, 60)
+    Row.BackgroundColor3 = Color3.fromRGB(30, 33, 42)
+    Row.BorderSizePixel = 0
+    Row.Parent = Container
+
+    local RowCorner = Instance.new("UICorner")
+    RowCorner.CornerRadius = UDim.new(0, 10)
+    RowCorner.Parent = Row
+
+    local NameLbl = Instance.new("TextLabel")
+    NameLbl.Size = UDim2.new(1, -78, 0, 22)
+    NameLbl.Position = UDim2.new(0, 12, 0, 8)
+    NameLbl.BackgroundTransparency = 1
+    NameLbl.Text = titleText
+    NameLbl.TextColor3 = Color3.fromRGB(245, 247, 250)
+    NameLbl.Font = Enum.Font.GothamBold
+    NameLbl.TextSize = 13
+    NameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    NameLbl.Parent = Row
+
+    local DescLbl = Instance.new("TextLabel")
+    DescLbl.Size = UDim2.new(1, -78, 0, 18)
+    DescLbl.Position = UDim2.new(0, 12, 0, 31)
+    DescLbl.BackgroundTransparency = 1
+    DescLbl.Text = descText
+    DescLbl.TextColor3 = Color3.fromRGB(155, 160, 175)
+    DescLbl.Font = Enum.Font.Gotham
+    DescLbl.TextSize = 11
+    DescLbl.TextXAlignment = Enum.TextXAlignment.Left
+    DescLbl.Parent = Row
+
+    local Track = Instance.new("TextButton")
+    Track.Size = UDim2.new(0, 50, 0, 26)
+    Track.Position = UDim2.new(1, -62, 0.5, -13)
+    Track.BackgroundColor3 = Color3.fromRGB(55, 60, 75)
+    Track.Text = ""
+    Track.AutoButtonColor = false
+    Track.Parent = Row
+
+    local TrackCorner = Instance.new("UICorner")
+    TrackCorner.CornerRadius = UDim.new(1, 0)
+    TrackCorner.Parent = Track
+
+    local Thumb = Instance.new("Frame")
+    Thumb.Size = UDim2.new(0, 20, 0, 20)
+    Thumb.Position = UDim2.new(0, 3, 0.5, -10)
+    Thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Thumb.Parent = Track
+
+    local ThumbCorner = Instance.new("UICorner")
+    ThumbCorner.CornerRadius = UDim.new(1, 0)
+    ThumbCorner.Parent = Thumb
+
+    local active = false
+    Track.MouseButton1Click:Connect(function()
+        active = not active
+        local info = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        if active then
+            TweenService:Create(Track, info, {BackgroundColor3 = Color3.fromRGB(72, 199, 116)}):Play()
+            TweenService:Create(Thumb, info, {Position = UDim2.new(1, -23, 0.5, -10)}):Play()
+        else
+            TweenService:Create(Track, info, {BackgroundColor3 = Color3.fromRGB(55, 60, 75)}):Play()
+            TweenService:Create(Thumb, info, {Position = UDim2.new(0, 3, 0.5, -10)}):Play()
+        end
+        callback(active)
+    end)
+end
+
+-- ==========================================
+-- ฟังก์ชันการทำงานหลัก
+-- ==========================================
+
+-- 1. กันเตะออกจากเซิร์ฟ (Anti-AFK)
+LocalPlayer.Idled:Connect(function()
+    if States.AntiAFK then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
+
+CreateAnimatedToggle("🛡️ กันเตะ AFK", "ป้องกันการโดนเตะเมื่อยืนนิ่งนานเกินกำหนด", function(state)
+    States.AntiAFK = state
+end)
+
+-- 2. ภาพดินน้ำมัน (Potato Graphics)
+local function EnablePotatoMode()
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        pcall(function()
+            if obj:IsA("BasePart") then
+                obj.Material = Enum.Material.SmoothPlastic
+                obj.Reflectance = 0
+            elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                obj.Transparency = 1
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+                obj.Enabled = false
+            end
+        end)
+    end
+end
+
+CreateAnimatedToggle("🥔 ภาพดินน้ำมัน", "ลดรายละเอียดกราฟิกและเอฟเฟกต์ให้ฟาร์มลื่นขึ้น", function(state)
+    States.PotatoMode = state
+    if state then
+        EnablePotatoMode()
+    end
+end)
+
+-- 3. ตกปลาอัตโนมัติ Sol's RNG (เติมหลอดให้เต็มไวโดยไม่ต้องกดเอง)
+RunService.RenderStepped:Connect(function()
+    if not States.AutoFish then return end
+
+    for _, gui in ipairs(PlayerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") and gui.Enabled then
+            local fishingUi = gui:FindFirstChild("Fishing", true)
+                or gui:FindFirstChild("Minigame", true)
+                or gui:FindFirstChild("CatchBar", true)
+
+            if fishingUi and fishingUi.Visible then
+                local bar = fishingUi:FindFirstChild("Bar", true)
+                    or fishingUi:FindFirstChild("Catch", true)
+                    or fishingUi:FindFirstChild("Slider", true)
+
+                local fish = fishingUi:FindFirstChild("Fish", true)
+                    or fishingUi:FindFirstChild("Target", true)
+                    or fishingUi:FindFirstChild("Icon", true)
+
+                if bar and fish
